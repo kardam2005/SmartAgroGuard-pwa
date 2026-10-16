@@ -13,7 +13,7 @@ export const PWAService = {
    */
   registerServiceWorker(onUpdateFound) {
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      window.addEventListener('load', () => {
+      const doRegister = () => {
         navigator.serviceWorker
           .register('/sw.js')
           .then((registration) => {
@@ -36,7 +36,13 @@ export const PWAService = {
           .catch((error) => {
             console.warn('[AgroGuard PWA] Service Worker registration failed:', error);
           });
-      });
+      };
+
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        doRegister();
+      } else {
+        window.addEventListener('load', doRegister);
+      }
     }
 
     // Capture beforeinstallprompt event for custom install banner/button
@@ -59,7 +65,7 @@ export const PWAService = {
    */
   onInstallableChange(callback) {
     installListeners.add(callback);
-    callback(!!deferredInstallPrompt);
+    callback(!!deferredInstallPrompt || this.isIOS());
     return () => installListeners.delete(callback);
   },
 
@@ -70,14 +76,19 @@ export const PWAService = {
     if (!deferredInstallPrompt) {
       return { outcome: 'dismissed', reason: 'no-prompt' };
     }
-    deferredInstallPrompt.prompt();
-    const choice = await deferredInstallPrompt.userChoice;
-    if (choice.outcome === 'accepted') {
-      console.log('[AgroGuard PWA] User accepted the PWA install prompt');
+    try {
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        console.log('[AgroGuard PWA] User accepted the PWA install prompt');
+      }
+      deferredInstallPrompt = null;
+      installListeners.forEach((listener) => listener(false));
+      return choice;
+    } catch (err) {
+      console.warn('[AgroGuard PWA] Install prompt error:', err);
+      return { outcome: 'dismissed', reason: 'no-prompt' };
     }
-    deferredInstallPrompt = null;
-    installListeners.forEach((listener) => listener(false));
-    return choice;
   },
 
   /**
@@ -92,16 +103,17 @@ export const PWAService = {
   },
 
   /**
-   * Detect iOS Device (requires manual 'Add to Home Screen' modal)
+   * Detect iOS Device (iPhone / iPad / iPod)
    */
   isIOS() {
     const userAgent = window.navigator.userAgent.toLowerCase();
-    return /iphone|ipad|ipod/.test(userAgent) && !window.MSStream;
+    const isAppleMobile = /iphone|ipad|ipod/.test(userAgent);
+    const isMacTouch = /macintosh/.test(userAgent) && navigator.maxTouchPoints > 1;
+    return (isAppleMobile || isMacTouch) && !window.MSStream;
   },
 
   /**
    * Device Haptic Feedback (Vibration API)
-   * Pattern: e.g. [50] for quick tap, [100, 50, 100] for alert
    */
   triggerHaptic(pattern = [60]) {
     if ('vibrate' in navigator) {
@@ -128,7 +140,6 @@ export const PWAService = {
         return false;
       }
     } else {
-      // Fallback: Copy link to clipboard
       try {
         if (data.url) {
           await navigator.clipboard.writeText(data.url);

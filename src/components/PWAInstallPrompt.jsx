@@ -6,10 +6,10 @@ export default function PWAInstallPrompt() {
   const [isIOSDevice, setIsIOSDevice] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [showIOSModal, setShowIOSModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   useEffect(() => {
-    // Check if already in standalone PWA mode
+    // Check if already running in standalone PWA mode
     if (PWAService.isStandalone()) {
       setIsInstalled(true);
       return;
@@ -24,10 +24,9 @@ export default function PWAInstallPrompt() {
     // iOS detection
     if (PWAService.isIOS()) {
       setIsIOSDevice(true);
-      setCanInstall(true);
     }
 
-    // Listen for standard beforeinstallprompt
+    // Listen for installable status
     const unsubscribe = PWAService.onInstallableChange((installable) => {
       setCanInstall(installable);
     });
@@ -37,8 +36,9 @@ export default function PWAInstallPrompt() {
 
   const handleInstallClick = async () => {
     PWAService.triggerHaptic([40, 30, 40]);
+
     if (isIOSDevice) {
-      setShowIOSModal(true);
+      setShowGuideModal(true);
       return;
     }
 
@@ -46,6 +46,9 @@ export default function PWAInstallPrompt() {
     if (res && res.outcome === 'accepted') {
       setIsInstalled(true);
       PWAService.triggerHaptic([60, 60, 100]);
+    } else {
+      // If browser doesn't support JS install trigger or no prompt available, show visual instructions
+      setShowGuideModal(true);
     }
   };
 
@@ -54,7 +57,7 @@ export default function PWAInstallPrompt() {
     sessionStorage.setItem('agroguard_pwa_install_dismissed', 'true');
   };
 
-  if (isInstalled || isDismissed || (!canInstall && !isIOSDevice)) {
+  if (isInstalled || isDismissed) {
     return null;
   }
 
@@ -67,11 +70,11 @@ export default function PWAInstallPrompt() {
           </div>
           <div className="pwa-install-texts">
             <div className="pwa-install-title">
-              Install AgroGuard PWA
-              <span className="pwa-badge-pill">Offline Ready</span>
+              Install AgroGuard App
+              <span className="pwa-badge-pill">PWA</span>
             </div>
             <p className="pwa-install-desc">
-              Get full screen app experience, 1-tap disease scan & offline field access.
+              1-tap homescreen launch, full-screen mode & offline field access.
             </p>
           </div>
         </div>
@@ -101,40 +104,66 @@ export default function PWAInstallPrompt() {
         </div>
       </div>
 
-      {/* iOS Safari 'Add to Home Screen' Instructions Modal */}
-      {showIOSModal && (
-        <div className="pwa-ios-modal-overlay" onClick={() => setShowIOSModal(false)}>
+      {/* Guided Installation Modal (Android / iOS / Desktop) */}
+      {showGuideModal && (
+        <div className="pwa-ios-modal-overlay" onClick={() => setShowGuideModal(false)}>
           <div className="pwa-ios-modal" onClick={(e) => e.stopPropagation()}>
             <div className="pwa-ios-header">
               <div className="pwa-icon-glow" style={{ width: 44, height: 44 }}>
                 <img src="/icons/icon-192x192.png" alt="AgroGuard" style={{ width: '100%', height: '100%', borderRadius: 10 }} />
               </div>
-              <h3 style={{ margin: 0, color: '#fff', fontSize: '1.25rem', fontWeight: 700 }}>Install on iPhone / iPad</h3>
-              <button className="pwa-btn-dismiss" onClick={() => setShowIOSModal(false)}>✕</button>
+              <h3 style={{ margin: 0, color: '#fff', fontSize: '1.25rem', fontWeight: 700 }}>
+                {isIOSDevice ? 'Install on iPhone / iPad' : 'Add to Home Screen'}
+              </h3>
+              <button className="pwa-btn-dismiss" onClick={() => setShowGuideModal(false)}>✕</button>
             </div>
+            
             <p style={{ color: '#9ca3af', fontSize: '0.92rem', margin: '14px 0 20px', lineHeight: 1.5 }}>
-              Apple Safari does not allow automatic 1-tap installation. Follow these 2 easy steps:
+              {isIOSDevice 
+                ? 'Follow these 2 quick steps in Apple Safari:' 
+                : 'Your browser requires adding the app via the browser menu:'}
             </p>
+
             <div className="pwa-ios-steps">
-              <div className="pwa-ios-step">
-                <div className="pwa-step-number">1</div>
-                <div>
-                  Tap the <strong>Share</strong> button <span style={{ fontSize: '1.2rem' }}>⎙</span> in the bottom toolbar of Safari.
-                </div>
-              </div>
-              <div className="pwa-ios-step">
-                <div className="pwa-step-number">2</div>
-                <div>
-                  Scroll down and tap <strong>Add to Home Screen</strong> <span style={{ fontSize: '1.2rem' }}>➕</span>.
-                </div>
-              </div>
+              {isIOSDevice ? (
+                <>
+                  <div className="pwa-ios-step">
+                    <div className="pwa-step-number">1</div>
+                    <div>
+                      Tap the <strong>Share</strong> button <span style={{ fontSize: '1.2rem' }}>⎙</span> in Safari's bottom toolbar.
+                    </div>
+                  </div>
+                  <div className="pwa-ios-step">
+                    <div className="pwa-step-number">2</div>
+                    <div>
+                      Scroll down and tap <strong>Add to Home Screen</strong> <span style={{ fontSize: '1.2rem' }}>➕</span>.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="pwa-ios-step">
+                    <div className="pwa-step-number">1</div>
+                    <div>
+                      Tap the <strong>three dots menu (⋮)</strong> in the top-right corner of Chrome or your browser.
+                    </div>
+                  </div>
+                  <div className="pwa-ios-step">
+                    <div className="pwa-step-number">2</div>
+                    <div>
+                      Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+
             <button 
               className="pwa-btn-install" 
               style={{ width: '100%', marginTop: '20px', justifyContent: 'center' }} 
-              onClick={() => setShowIOSModal(false)}
+              onClick={() => setShowGuideModal(false)}
             >
-              Got It
+              Understood
             </button>
           </div>
         </div>
