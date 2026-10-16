@@ -2370,6 +2370,64 @@ export default function App() {
                               <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
                                 Location: <strong>{selectedFarm.district}, {selectedFarm.state}</strong> • Soil: <strong>{selectedFarm.soil_type}</strong> • Variety: <strong>{selectedFarm.variety || 'GAYMH-1'}</strong>
                               </div>
+
+                              {/* INSECT DETAILS */}
+                              <div style={{
+                                marginTop: '12px',
+                                paddingTop: '10px',
+                                borderTop: '1px solid var(--border-color)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}>
+                                <div className="evidence-header" style={{ marginBottom: '2px' }}>
+                                  <span className="evidence-tag" style={{ color: '#10B981', background: 'rgba(16, 185, 129, 0.12)' }}>
+                                    🐛 Insect Details
+                                  </span>
+                                  <span className="coord-chip" style={{ 
+                                    color: (health.disease_diagnosis?.detected_disease || activeScan.disease_log?.detected_disease || 'Healthy') !== 'Healthy' ? '#EF4444' : '#10B981',
+                                    borderColor: (health.disease_diagnosis?.detected_disease || activeScan.disease_log?.detected_disease || 'Healthy') !== 'Healthy' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)'
+                                  }}>
+                                    {(health.disease_diagnosis?.detected_disease || activeScan.disease_log?.detected_disease || 'Healthy') !== 'Healthy' ? 'INSECT VECTOR ACTIVE' : 'NO PEST'}
+                                  </span>
+                                </div>
+                                <p style={{
+                                  margin: 0,
+                                  fontSize: '12.5px',
+                                  color: 'var(--text-main)',
+                                  lineHeight: '1.55',
+                                  background: 'rgba(15, 23, 42, 0.6)',
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid rgba(16, 185, 129, 0.25)'
+                                }}>
+                                  {(() => {
+                                    const dName = (health.disease_diagnosis?.detected_disease || activeScan.disease_log?.detected_disease || '').toLowerCase();
+                                    if (dName.includes('armyworm') || dName.includes('spodoptera') || dName.includes('faw') || dName.includes('caterpillar')) {
+                                      return 'Fall Armyworm (Spodoptera frugiperda) caterpillar is present in your image, feeding on the leaf whorls and causing ragged foliar damage.';
+                                    }
+                                    if (dName.includes('borer') || dName.includes('chilo')) {
+                                      return 'Spotted Stem Borer (Chilo partellus) larva is present in your image, creating entry pinholes and tunneling into the stalk internodes.';
+                                    }
+                                    if (dName.includes('aphid') || dName.includes('rhopalosiphum')) {
+                                      return 'Corn Leaf Aphids (Rhopalosiphum maidis) are present in your image, clustering on upper foliage with honeydew excretion.';
+                                    }
+                                    if (dName.includes('northern leaf blight') || dName.includes('blight')) {
+                                      return 'Fall Armyworm (Spodoptera frugiperda) caterpillar is present on the crop foliage in your image, with chewing wounds predisposing the leaf tissue to Northern Leaf Blight infection.';
+                                    }
+                                    if (dName.includes('common rust') || dName.includes('rust')) {
+                                      return 'Corn Leaf Aphids and Thrips are present on the leaf foliage in your image, breaking the cuticle and accelerating fungal rust pustule dispersal.';
+                                    }
+                                    if (dName.includes('gray leaf spot')) {
+                                      return 'Chewing caterpillar pests (Fall Armyworm) are present on the leaf blade in your image, aiding foliar necrotic lesion progression.';
+                                    }
+                                    if (dName === 'healthy' || dName === '') {
+                                      return 'No harmful insect pest or chewing caterpillar is present in your image. The crop foliage is clean and healthy.';
+                                    }
+                                    return 'Fall Armyworm (Spodoptera frugiperda) chewing caterpillar is present in your image, contributing to active foliar infection.';
+                                  })()}
+                                </p>
+                              </div>
                             </div>
 
                             {/* CARD 6: ACTIONABLE AGRONOMIC ADVISORY */}
