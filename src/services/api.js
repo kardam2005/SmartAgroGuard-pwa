@@ -2,11 +2,18 @@ import axios from 'axios';
 
 /**
  * Dynamically resolve backend base URL:
- * - If VITE_API_URL is configured in Vercel environment variables, use that production backend.
+ * - If user saved a custom tunnel URL in localStorage ('custom_api_url'), prioritize it.
+ * - If VITE_API_URL is configured in Vercel environment variables or .env.production, use that.
  * - In local dev with Vite reverse proxy, empty string '' routes '/api' requests through Vite
  *   to http://127.0.0.1:8000 seamlessly for both desktop and mobile devices.
  */
 const getBaseURL = () => {
+  if (typeof window !== 'undefined') {
+    const customUrl = localStorage.getItem('custom_api_url');
+    if (customUrl && customUrl.trim().length > 0) {
+      return customUrl.trim().replace(/\/$/, '');
+    }
+  }
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/$/, '');
   }
@@ -16,7 +23,7 @@ const getBaseURL = () => {
 
 const api = axios.create({
   baseURL: getBaseURL(),
-  timeout: 20000,
+  timeout: 60000,
 });
 
 // Request interceptor to automatically insert authorization token

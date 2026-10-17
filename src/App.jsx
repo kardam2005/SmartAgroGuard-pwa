@@ -206,9 +206,35 @@ export default function App() {
         populateFarmFormState(first);
         fetchScans(first.farm_id);
       } else {
-        setSelectedFarm(null);
-        setScans([]);
-        setActiveScan(null);
+        // If user has no farms yet, auto-provision a starter parcel so they can immediately scan crops
+        try {
+          const defaultFarmPayload = {
+            farm_address: 'Primary Parcel, Anand, Gujarat',
+            farm_area: '3.5',
+            active_crop: 'Corn',
+            state: 'Gujarat',
+            district: 'Anand',
+            taluka: 'Anand Rural',
+            village: 'Bakrol',
+            entered_latitude: 22.55359,
+            entered_longitude: 72.92352,
+            soil_type: 'Sandy Loam (Goradu)',
+            season: 'KHARIF',
+            sowing_date: '2026-06-10',
+            variety: 'GAYMH-1'
+          };
+          const createdRes = await api.post('/api/v1/farms', defaultFarmPayload);
+          const newFarm = createdRes.data;
+          setFarms([newFarm]);
+          setSelectedFarm(newFarm);
+          populateFarmFormState(newFarm);
+          OfflineSyncService.cacheFarms([newFarm]);
+        } catch (farmErr) {
+          console.warn('Could not auto-create starter farm:', farmErr);
+          setSelectedFarm(null);
+          setScans([]);
+          setActiveScan(null);
+        }
       }
     } catch (err) {
       console.warn('Error loading farms, checking offline cache:', err);
@@ -783,9 +809,9 @@ export default function App() {
     }
   };
 
-  // Image change handler with strict resolution verification
+  // Image change handler with strict resolution verification and mobile canvas auto-downscaling
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -806,9 +832,43 @@ export default function App() {
             if (e.target) e.target.value = '';
             return;
           }
-          setSelectedFile(file);
-          setImagePreview(reader.result);
-          setImageDimensions({ width: w, height: h });
+
+          // Auto-scale large mobile camera photos (e.g. 12MP - 48MP) to max dimension 1400px
+          // This reduces 15MB+ payloads to ~350KB JPEG while preserving complete leaf detail
+          const MAX_DIM = 1400;
+          let targetW = w;
+          let targetH = h;
+          if (w > MAX_DIM || h > MAX_DIM) {
+            if (w >= h) {
+              targetW = MAX_DIM;
+              targetH = Math.round((h * MAX_DIM) / w);
+            } else {
+              targetH = MAX_DIM;
+              targetW = Math.round((w * MAX_DIM) / h);
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const safeName = (file.name || 'crop_scan').replace(/\.[^/.]+$/, '') + '.jpg';
+              const optimizedFile = new File([blob], safeName, {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              setSelectedFile(optimizedFile);
+            } else {
+              setSelectedFile(file);
+            }
+          }, 'image/jpeg', 0.88);
+
+          setImagePreview(canvas.toDataURL('image/jpeg', 0.88));
+          setImageDimensions({ width: targetW, height: targetH });
         };
         img.src = reader.result;
       };
@@ -819,6 +879,21 @@ export default function App() {
   // Submit Crop Diagnostic Scan
   const handleSubmitScan = async (e) => {
     e.preventDefault();
+
+    // 1. Ensure a farm is selected or available
+    let currentFarm = selectedFarm;
+    if (!currentFarm || !currentFarm.farm_id) {
+      if (farms && farms.length > 0) {
+        currentFarm = farms[0];
+        setSelectedFarm(currentFarm);
+      } else {
+        alert('⚠️ No Farm Parcel Found!\n\nPlease add a farm parcel on the Overview page before submitting a crop scan so AgroGuard can track crop health, soil conditions, and history.');
+        setCurrentPage('home');
+        setFarmModalOpen(true);
+        return;
+      }
+    }
+
     if (!scanSowingDate || !scanDate) {
       alert('Please select both Sowing Date and Scan Date.');
       return;
@@ -841,26 +916,26 @@ export default function App() {
 
     setSubmittingScan(true);
     const formData = new FormData();
-    formData.append('farm_id', selectedFarm.farm_id);
-    formData.append('crop_type', selectedFarm.active_crop || 'Corn');
+    formData.append('farm_id', currentFarm.farm_id);
+    formData.append('crop_type', currentFarm.active_crop || 'Corn');
     formData.append('sowing_date', scanSowingDate);
     formData.append('scan_date', scanDate);
     formData.append('day_count', computedDas);
     formData.append('image', selectedFile);
     if (gpsLat !== null) formData.append('gps_latitude', gpsLat);
     if (gpsLon !== null) formData.append('gps_longitude', gpsLon);
-    if (selectedFarm.season) formData.append('season', selectedFarm.season);
+    if (currentFarm.season) formData.append('season', currentFarm.season);
 
     try {
-      const response = await api.post('/api/v1/scans', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // NOTE: Do NOT manually pass 'Content-Type': 'multipart/form-data'.
+      // Axios and browser will automatically compute the multipart boundary header.
+      const response = await api.post('/api/v1/scans', formData);
       
       setSelectedFile(null);
       setImagePreview(null);
       
       // Refresh scan list
-      const updatedScans = await api.get(`/api/v1/scans/farm/${selectedFarm.farm_id}`);
+      const updatedScans = await api.get(`/api/v1/scans/farm/${currentFarm.farm_id}`);
       setScans(updatedScans.data);
       if (updatedScans.data.length > 0) {
         setActiveScan(updatedScans.data[0]);
@@ -880,8 +955,18 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error processing scan:', err);
-      const msg = err.response?.data?.detail || 'Failed to submit crop scan.';
-      alert(msg);
+      const detail = err.response?.data?.detail;
+      let displayMsg = 'Failed to submit crop scan.';
+      if (typeof detail === 'string') {
+        displayMsg = detail;
+      } else if (Array.isArray(detail)) {
+        displayMsg = detail.map(d => `${d.loc ? d.loc.join('.') : 'Field'}: ${d.msg}`).join('\n');
+      } else if (typeof detail === 'object' && detail !== null) {
+        displayMsg = JSON.stringify(detail, null, 2);
+      } else if (err.message) {
+        displayMsg = err.message;
+      }
+      alert(`⚠️ Failed to submit crop scan:\n\n${displayMsg}`);
     } finally {
       setSubmittingScan(false);
     }
